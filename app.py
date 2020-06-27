@@ -1,86 +1,59 @@
-import pandas as pd
+import numpy as np
 
+from bokeh.io import curdoc
 from bokeh.layouts import column, row
-from bokeh.models import Select
-from bokeh.palettes import Spectral5
-from bokeh.plotting import curdoc, figure
-from bokeh.sampledata.autompg import autompg_clean as df
+from bokeh.models import ColumnDataSource, Slider, TextInput
+from bokeh.plotting import figure
 
-df = df.copy()
-
-SIZES = list(range(6, 22, 3))
-COLORS = Spectral5
-N_SIZES = len(SIZES)
-N_COLORS = len(COLORS)
-
-# data cleanup
-df.cyl = df.cyl.astype(str)
-df.yr = df.yr.astype(str)
-del df['name']
-
-columns = sorted(df.columns)
-discrete = [x for x in columns if df[x].dtype == object]
-continuous = [x for x in columns if x not in discrete]
-
-def create_figure():
-    xs = df[x.value].values
-    ys = df[y.value].values
-    x_title = x.value.title()
-    y_title = y.value.title()
-
-    kw = dict()
-    if x.value in discrete:
-        kw['x_range'] = sorted(set(xs))
-    if y.value in discrete:
-        kw['y_range'] = sorted(set(ys))
-    kw['title'] = "%s vs %s" % (x_title, y_title)
-
-    p = figure(plot_height=600, plot_width=800, tools='pan,box_zoom,hover,reset', **kw)
-    p.xaxis.axis_label = x_title
-    p.yaxis.axis_label = y_title
-
-    if x.value in discrete:
-        p.xaxis.major_label_orientation = pd.np.pi / 4
-
-    sz = 9
-    if size.value != 'None':
-        if len(set(df[size.value])) > N_SIZES:
-            groups = pd.qcut(df[size.value].values, N_SIZES, duplicates='drop')
-        else:
-            groups = pd.Categorical(df[size.value])
-        sz = [SIZES[xx] for xx in groups.codes]
-
-    c = "#31AADE"
-    if color.value != 'None':
-        if len(set(df[color.value])) > N_COLORS:
-            groups = pd.qcut(df[color.value].values, N_COLORS, duplicates='drop')
-        else:
-            groups = pd.Categorical(df[color.value])
-        c = [COLORS[xx] for xx in groups.codes]
-
-    p.circle(x=xs, y=ys, color=c, size=sz, line_color="white", alpha=0.6, hover_color='white', hover_alpha=0.5)
-
-    return p
+# Set up data
+N = 200
+x = np.linspace(0, 4*np.pi, N)
+y = np.sin(x)
+source = ColumnDataSource(data=dict(x=x, y=y))
 
 
-def update(attr, old, new):
-    layout.children[1] = create_figure()
+# Set up plot
+plot = figure(plot_height=400, plot_width=400, title="my sine wave",
+              tools="crosshair,pan,reset,save,wheel_zoom",
+              x_range=[0, 4*np.pi], y_range=[-2.5, 2.5])
+
+plot.line('x', 'y', source=source, line_width=3, line_alpha=0.6)
 
 
-x = Select(title='X-Axis', value='mpg', options=columns)
-x.on_change('value', update)
+# Set up widgets
+text = TextInput(title="title", value='my sine wave')
+offset = Slider(title="offset", value=0.0, start=-5.0, end=5.0, step=0.1)
+amplitude = Slider(title="amplitude", value=1.0, start=-5.0, end=5.0, step=0.1)
+phase = Slider(title="phase", value=0.0, start=0.0, end=2*np.pi)
+freq = Slider(title="frequency", value=1.0, start=0.1, end=5.1, step=0.1)
 
-y = Select(title='Y-Axis', value='hp', options=columns)
-y.on_change('value', update)
 
-size = Select(title='Size', value='None', options=['None'] + continuous)
-size.on_change('value', update)
+# Set up callbacks
+def update_title(attrname, old, new):
+    plot.title.text = text.value
 
-color = Select(title='Color', value='None', options=['None'] + continuous)
-color.on_change('value', update)
+text.on_change('value', update_title)
 
-controls = column(x, y, color, size, width=200)
-layout = row(controls, create_figure())
+def update_data(attrname, old, new):
 
-curdoc().add_root(layout)
-curdoc().title = "Crossfilter"
+    # Get the current slider values
+    a = amplitude.value
+    b = offset.value
+    w = phase.value
+    k = freq.value
+
+    # Generate the new curve
+    x = np.linspace(0, 4*np.pi, N)
+    y = a*np.sin(k*x + w) + b
+
+    source.data = dict(x=x, y=y)
+
+for w in [offset, amplitude, phase, freq]:
+    w.on_change('value', update_data)
+
+
+# Set up layouts and add to document
+inputs = column(text, offset, amplitude, phase, freq)
+
+curdoc().add_root(row(inputs, plot, width=800))
+curdoc().title = "Sliders"
